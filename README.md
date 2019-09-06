@@ -1,10 +1,10 @@
 # figack.core
 
-FIXME: Write a one-line description of your library/project.
+Recreational project to learn Clojure(Script) while hopefully having some fun!
 
 ## Overview
 
-FIXME: Write a paragraph about the library/project and highlight its goals.
+Dungeons and Dragons a-la NetHack, using ClojureScript.
 
 ## Development
 
@@ -29,9 +29,9 @@ To create a production build run:
 	rm -rf target/public
 	clojure -A:fig:min
 
-
 ## License
 
-Copyright © 2018 FIXME
+Copyright © 2019 Figack Devs.
 
-Distributed under the Eclipse Public License either version 1.0 or (at your option) any later version.
+Distributed under the Eclipse Public License either version 1.0 or (at your
+option) any later version.
