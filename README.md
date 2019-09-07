@@ -8,6 +8,11 @@ Dungeons and Dragons a-la NetHack, using ClojureScript.
 
 ## Development
 
+### Prerequisites
+
+1. Install `clj` CLI tool: https://clojure.org/guides/getting_started#_clojure_installer_and_cli_tools
+2. Get yourself familiar with: https://figwheel.org/
+
 To get an interactive development environment run:
 
     clojure -A:fig:build
@@ -26,8 +31,8 @@ To clean all compiled files:
 
 To create a production build run:
 
-	rm -rf target/public
-	clojure -A:fig:min
+    rm -rf target/public
+    clojure -A:fig:min
 
 ## License
 
