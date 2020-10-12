@@ -26,23 +26,75 @@
 (defn make-player []
   {:class :human})
 
-(comment
+(defonce player-pos (atom nil))
+
+(defn create-world! []
   (build-border-walls!)
-  (dosync
-   (alter (nth (level/get-line world 3) 4)
-          #(assoc % :being (make-player))))
+  (let [pos {:x 4
+             :y 3}]
+    (reset! player-pos pos)
+    (dosync
+     (alter (level/get-field-at world pos)
+            #(assoc % :being (make-player))))))
 
-  @(nth (level/get-line world 3) 4)
+(defn print-help []
+  (println "h=help q=quit"))
 
-  (->> (make-snapshot) repl/render-snapshot)
-;; ----------------------------------------
-;; |......................................|
-;; |......................................|
-;; |...@..................................|
-;; |......................................|
-;; |......................................|
-;; |......................................|
-;; |......................................|
-;; |......................................|
-;; ----------------------------------------
+(def move-dirs #{:N :NE :E :SE :S :SW :W :NW})
+
+(defn new-pos-for-move
+  "Calculates the new virtual position for a given move direction.  Performs no
+  boundary checks."
+  [{:keys [x y]} dir]
+  {:pre [(contains? move-dirs dir)]}
+  (case dir
+    :N  {:x      x  :y (dec y)}
+    :NE {:x (inc x) :y (dec y)}
+    :E  {:x (inc x) :y      y}
+    :SE {:x (inc x) :y (inc y)}
+    :S  {:x      x  :y (inc y)}
+    :SW {:x (dec x) :y (inc y)}
+    :W  {:x (dec x) :y      y}
+    :NW {:x (dec x) :y (dec y)}))
+
+(defn move-being-at!
+  "Tries to move a being that should be found in the world at position `pos` in
+  the direction given by `dir` and returns the new position (which might be
+  unchanged, in case of hiting an obstacle, or different from the expected
+  position, in case of other interactions)."
+  [pos dir]
+  (let [new-pos (new-pos-for-move pos dir)
+        src (level/get-field-at world pos)
+        dst (level/get-field-at world new-pos)]
+    (dosync
+     (let [being (:being @src)]
+       (alter src #(dissoc % :being))
+       (alter dst #(assoc  % :being being))))
+    new-pos))
+
+(defn move-player [dir]
+  (swap! player-pos #(move-being-at! % dir)))
+
+(defn play! []
+  (loop []
+    (repl/print-snapshot (make-snapshot))
+    (let [cmd (read)]
+      (case cmd
+        n  (move-player :N)
+        ne (move-player :NE)
+        e  (move-player :E)
+        se (move-player :SE)
+        s  (move-player :S)
+        sw (move-player :SW)
+        w  (move-player :W)
+        nw (move-player :NW)
+        h (print-help)
+        q nil
+        (print-help))
+      (when-not (= 'q cmd)
+        (recur)))))
+
+(comment
+  (create-world!)
+  (play!)
   )

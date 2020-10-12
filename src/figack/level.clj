@@ -16,3 +16,6 @@
   (subvec fields
           (* y width)
           (* (inc y) width)))
+
+(defn get-field-at [fields {:keys [x y]}]
+  (nth (get-line fields y) x))
