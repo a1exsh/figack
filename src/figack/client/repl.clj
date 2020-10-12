@@ -9,7 +9,7 @@
 (defn render-line [line]
   (clojure.string/join (map render/render line)))
 
-(defn render-snapshot [fields]
+(defn print-snapshot [fields]
   (println)
   (doseq [y (range level/height)]
     (println (render-line (level/get-line fields y)))))
