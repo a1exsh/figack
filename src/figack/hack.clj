@@ -1,13 +1,35 @@
 (ns figack.hack
   (:require [figack.level :as level]
-            [figack.level.walls :as walls]
+            [figack.level
+             [beings :as beings]
+             [walls :as walls]]
             [figack.client.repl :as repl]))
 
-(defonce world (level/empty-level))
+(def #_once world (level/empty-level))
 
 (defn make-snapshot []
   (dosync
    (into [] (map deref world))))
+
+#_(defn find-in [field obj-type]
+  (->> field
+       :objects
+       (filter #(-> % :type (= obj-type)))))
+
+(defn validate-field [field]
+  (when (-> field :objects count (> 1))
+    (throw (Exception. "Too many objects on one field.")))
+
+  #_(when (and (instance? figack.level.walls.Wall field)
+                 (not (empty? beings)))
+        (throw (Exception. "It bumps into a wall.")))
+
+  true)
+
+(defn set-validations! []
+  (->> world
+       (map #(set-validator! % validate-field))
+       dorun))
 
 (defn build-border-walls! []
   (let [first-line (level/get-line world 0)
@@ -24,18 +46,33 @@
 
 ;; player is not a field!
 (defn make-player []
-  {:class :human})
+  (beings/map->Being {:class :human}))
+
+(defonce object-id (atom 0))
+
+(defn next-object-id []
+  (swap! object-id inc))
+
+(defn add-object-at!
+  "Adds a newly created object `obj` to the field at position `pos` and
+  returns the position complete with object id."
+  [pos obj]
+  (let [obj-id (next-object-id)]
+    (alter (level/get-field-at world pos)
+           assoc-in
+           [:objects obj-id]
+           obj)
+    (assoc pos :id obj-id)))
 
 (defonce player-pos (atom nil))
 
 (defn create-world! []
+  (set-validations!)
   (build-border-walls!)
-  (let [pos {:x 4
-             :y 3}]
-    (reset! player-pos pos)
-    (dosync
-     (alter (level/get-field-at world pos)
-            #(assoc % :being (make-player))))))
+  (reset! player-pos
+          (dosync
+           (add-object-at! {:x 4 :y 3}
+                           (make-player)))))
 
 (defn print-help []
   (println "h=help q=quit"))
@@ -57,42 +94,56 @@
     :W  {:x (dec x) :y      y}
     :NW {:x (dec x) :y (dec y)}))
 
-(defn move-being-at!
-  "Tries to move a being that should be found in the world at position `pos` in
-  the direction given by `dir` and returns the new position (which might be
-  unchanged, in case of hiting an obstacle, or different from the expected
+(defn report-exception! [^Exception ex]
+  (-> (if (instance? java.lang.IllegalStateException ex)
+        (.getCause ex)
+        ex)
+      .getMessage
+      println))
+
+(defn move-object-at!
+  "Tries to move an object that should be found in the world at position `pos`
+  in the direction given by `dir` and returns the new position (which might be
+  unchanged, in case of hitting an obstacle, or different from the expected
   position, in case of other interactions)."
   [pos dir]
-  (let [new-pos (new-pos-for-move pos dir)
-        src (level/get-field-at world pos)
-        dst (level/get-field-at world new-pos)]
-    (dosync
-     (let [being (:being @src)]
-       (alter src #(dissoc % :being))
-       (alter dst #(assoc  % :being being))))
-    new-pos))
+  (try
+    (let [new-pos (new-pos-for-move pos dir)
+          src (level/get-field-at world pos)
+          dst (level/get-field-at world new-pos)
+          obj-id (:id pos)]
+      (dosync
+       (let [obj (get-in @src [:objects obj-id])]
+         (assert obj (str "The object must be found at the given position:" pos))
+         (alter src update :objects dissoc obj-id)
+         (alter dst assoc-in [:objects obj-id] obj)))
+      (assoc new-pos :id obj-id))
+    (catch Exception ex
+      (report-exception! ex)
+      pos)))
 
-(defn move-player [dir]
-  (swap! player-pos #(move-being-at! % dir)))
+(defn move-player! [dir]
+  (swap! player-pos move-object-at! dir))
+
+(defn read-and-act! []
+  (case (read)
+    n  (move-player! :N)
+    ne (move-player! :NE)
+    e  (move-player! :E)
+    se (move-player! :SE)
+    s  (move-player! :S)
+    sw (move-player! :SW)
+    w  (move-player! :W)
+    nw (move-player! :NW)
+    h  (print-help)
+    q  ::quit
+    (print-help)))
 
 (defn play! []
   (loop []
     (repl/print-snapshot (make-snapshot))
-    (let [cmd (read)]
-      (case cmd
-        n  (move-player :N)
-        ne (move-player :NE)
-        e  (move-player :E)
-        se (move-player :SE)
-        s  (move-player :S)
-        sw (move-player :SW)
-        w  (move-player :W)
-        nw (move-player :NW)
-        h (print-help)
-        q nil
-        (print-help))
-      (when-not (= 'q cmd)
-        (recur)))))
+    (when-not (= ::quit (read-and-act!))
+      (recur))))
 
 (comment
   (create-world!)

@@ -1,4 +1,7 @@
-(ns figack.client.repl.level.beings)
+(ns figack.client.repl.level.beings
+  (:require [figack.client.repl.level
+             [render :refer [Render]]])
+  (:import [figack.level.beings Being]))
 
 (defn which-being [being]
   (:class being))
@@ -7,3 +10,8 @@
 
 (defmethod render-being :human [_]
   \@)
+
+(extend-type Being
+  Render
+  (render [this]
+    (render-being this)))

@@ -3,10 +3,10 @@
 (def width 40)
 (def height 10)
 
-(defrecord Field [type])
+(defrecord Field [objects])
 
 (defn empty-field []
-  (map->Field {}))
+  (map->Field {:objects {}}))
 
 (defn empty-level []
   (into [] (repeatedly (* width height)
