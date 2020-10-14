@@ -2,6 +2,7 @@
   (:require [figack.level :as level]
             [figack.level
              [beings :as beings]
+             [gold :as gold]
              [walls :as walls]]
             [figack.client.repl :as repl]))
 
@@ -42,6 +43,7 @@
   (build-border-walls!)
   (reset! player-pos
           (dosync
+           (add-object-at! {:x 10 :y 5} (gold/make-gold 10))
            (add-object-at! {:x 4 :y 3}
                            (make-player)))))
 
