@@ -4,9 +4,9 @@
 
 (defrecord Wall [dir])
 
-(defn make-wall-field [dir]
+(defn make-wall [dir]
   {:pre [(contains? allowed-dirs dir)]}
   (->Wall dir))
 
-(def WE (make-wall-field :WE))
-(def NS (make-wall-field :NS))
+(def WE (make-wall :WE))
+(def NS (make-wall :NS))
