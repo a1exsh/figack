@@ -2,3 +2,6 @@
 
 (defprotocol Render
   (render [this]))
+
+(defn has-renderer? [x]
+  (->> x type (extends? Render)))
