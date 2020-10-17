@@ -2,28 +2,19 @@
   (:require [figack.level :as level]
             [figack.level
              [beings :as beings]
+             [gold :as gold]
              [walls :as walls]]
             [figack.client.repl :as repl]))
 
-(def #_once world (level/empty-level))
+(def world (level/make-empty-level))
 
 (defn make-snapshot []
   (dosync
    (into [] (map deref world))))
 
-#_(defn find-in [field obj-type]
-  (->> field
-       :objects
-       (filter #(-> % :type (= obj-type)))))
-
 (defn validate-field [field]
   (when (-> field :objects count (> 1))
     (throw (Exception. "Too many objects on one field.")))
-
-  #_(when (and (instance? figack.level.walls.Wall field)
-                 (not (empty? beings)))
-        (throw (Exception. "It bumps into a wall.")))
-
   true)
 
 (defn set-validations! []
@@ -36,43 +27,35 @@
         last-line  (level/get-line world (dec level/height))]
     (dosync
      (doseq [x (range level/width)]
-       (ref-set (nth first-line x) walls/WE)
-       (ref-set (nth last-line  x) walls/WE))
+       (level/add-object! (nth first-line x) walls/WE)
+       (level/add-object! (nth last-line  x) walls/WE))
 
      (doseq [y (range 1 (dec level/height))
              :let [line (level/get-line world y)]]
-       (ref-set (nth line 0) walls/NS)
-       (ref-set (nth line (dec level/width)) walls/NS)))))
+       (level/add-object! (nth line 0)                 walls/NS)
+       (level/add-object! (nth line (dec level/width)) walls/NS)))))
 
 ;; player is not a field!
 (defn make-player []
   (beings/map->Being {:class :human}))
 
-(defonce object-id (atom 0))
-
-(defn next-object-id []
-  (swap! object-id inc))
+(defonce player-pos (atom nil))
 
 (defn add-object-at!
   "Adds a newly created object `obj` to the field at position `pos` and
   returns the position complete with object id."
   [pos obj]
-  (let [obj-id (next-object-id)]
-    (alter (level/get-field-at world pos)
-           assoc-in
-           [:objects obj-id]
-           obj)
-    (assoc pos :id obj-id)))
-
-(defonce player-pos (atom nil))
+  (->> obj
+       (level/add-object! (level/get-field-at world pos))
+       (assoc pos :id)))
 
 (defn create-world! []
   (set-validations!)
   (build-border-walls!)
-  (reset! player-pos
-          (dosync
-           (add-object-at! {:x 4 :y 3}
-                           (make-player)))))
+  (dosync
+   (add-object-at! {:x 10 :y 5} (gold/make-gold 10))
+   (reset! player-pos
+           (add-object-at! {:x 4 :y 3} (make-player)))))
 
 (defn print-help []
   (println "h=help q=quit"))
@@ -82,23 +65,24 @@
 (defn new-pos-for-move
   "Calculates the new virtual position for a given move direction.  Performs no
   boundary checks."
-  [{:keys [x y]} dir]
+  [pos dir]
   {:pre [(contains? move-dirs dir)]}
   (case dir
-    :N  {:x      x  :y (dec y)}
-    :NE {:x (inc x) :y (dec y)}
-    :E  {:x (inc x) :y      y}
-    :SE {:x (inc x) :y (inc y)}
-    :S  {:x      x  :y (inc y)}
-    :SW {:x (dec x) :y (inc y)}
-    :W  {:x (dec x) :y      y}
-    :NW {:x (dec x) :y (dec y)}))
+    :N  (-> pos                 (update :y dec))
+    :NE (-> pos (update :x inc) (update :y dec))
+    :E  (-> pos (update :x inc))
+    :SE (-> pos (update :x inc) (update :y inc))
+    :S  (-> pos                 (update :y inc))
+    :SW (-> pos (update :x dec) (update :y inc))
+    :W  (-> pos (update :x dec))
+    :NW (-> pos (update :x dec) (update :y dec))))
 
 (defn report-exception! [^Exception ex]
   (-> (if (instance? java.lang.IllegalStateException ex)
         (.getCause ex)
         ex)
       .getMessage
+      (or (str ex))
       println))
 
 (defn move-object-at!
@@ -117,7 +101,7 @@
          (assert obj (str "The object must be found at the given position:" pos))
          (alter src update :objects dissoc obj-id)
          (alter dst assoc-in [:objects obj-id] obj)))
-      (assoc new-pos :id obj-id))
+      new-pos)
     (catch Exception ex
       (report-exception! ex)
       pos)))
@@ -146,6 +130,9 @@
       (recur))))
 
 (comment
+  (load "figack/hack")
+  (in-ns 'figack.hack)
+
   (create-world!)
   (play!)
   )
