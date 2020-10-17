@@ -12,16 +12,6 @@
   (dosync
    (into [] (map deref world))))
 
-(defn validate-field [field]
-  (when (-> field :objects count (> 1))
-    (throw (Exception. "Too many objects on one field.")))
-  true)
-
-(defn set-validations! []
-  (->> world
-       (map #(set-validator! % validate-field))
-       dorun))
-
 (defn build-border-walls! []
   (let [first-line (level/get-line world 0)
         last-line  (level/get-line world (dec level/height))]
@@ -50,7 +40,6 @@
        (assoc pos :id)))
 
 (defn create-world! []
-  (set-validations!)
   (build-border-walls!)
   (dosync
    (add-object-at! {:x 10 :y 5} (gold/make-gold 10))
