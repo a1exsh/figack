@@ -86,10 +86,10 @@
           dst (level/get-field-at world new-pos)
           obj-id (:id pos)]
       (dosync
-       (let [obj (get-in @src [:objects obj-id])]
+       (let [obj (get (:objects @src) obj-id)]
          (assert obj (str "The object must be found at the given position:" pos))
          (alter src update :objects dissoc obj-id)
-         (alter dst assoc-in [:objects obj-id] obj)))
+         (alter dst update :objects assoc  obj-id obj)))
       new-pos)
     (catch Exception ex
       (report-exception! ex)

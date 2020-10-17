@@ -38,8 +38,5 @@
   "Adds a newly created object `obj` to the field and returns the object id."
   [field obj]
   (let [obj-id (next-object-id)]
-    (alter field
-           assoc-in
-           [:objects obj-id]
-           obj)
+    (alter field update :objects assoc obj-id obj)
     obj-id))
