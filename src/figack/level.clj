@@ -1,22 +1,24 @@
-(ns figack.level)
+(ns figack.level
+  (:require [figack.validations :as validations]))
 
 (def width 40)
 (def height 10)
 
 (defrecord Field [objects])
 
-(defn validate-field [field]
-  (when (-> field :objects count (> 1))
-    (throw (Exception. "Too many objects on one field.")))
-  true)
-
 (defn make-field []
   (map->Field {:objects {}}))
+
+(defn field-objects [field]
+  (->> field :objects vals))
+
+(defn empty-field? [field]
+  (->> field field-objects empty?))
 
 (def empty-field (make-field))
 
 (defn make-field-ref []
-  (ref empty-field :validator validate-field))
+  (ref empty-field :validator #'validations/validate-field))
 
 (defn make-empty-level []
   (into [] (repeatedly (* width height) make-field-ref)))

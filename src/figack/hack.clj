@@ -1,5 +1,7 @@
 (ns figack.hack
-  (:require [figack.level :as level]
+  (:require [figack
+             [level :as level]
+             [movement :as movement]]
             [figack.level
              [beings :as beings]
              [gold :as gold]
@@ -49,54 +51,8 @@
 (defn print-help []
   (println "h=help q=quit"))
 
-(def move-dirs #{:N :NE :E :SE :S :SW :W :NW})
-
-(defn new-pos-for-move
-  "Calculates the new virtual position for a given move direction.  Performs no
-  boundary checks."
-  [pos dir]
-  {:pre [(contains? move-dirs dir)]}
-  (case dir
-    :N  (-> pos                 (update :y dec))
-    :NE (-> pos (update :x inc) (update :y dec))
-    :E  (-> pos (update :x inc))
-    :SE (-> pos (update :x inc) (update :y inc))
-    :S  (-> pos                 (update :y inc))
-    :SW (-> pos (update :x dec) (update :y inc))
-    :W  (-> pos (update :x dec))
-    :NW (-> pos (update :x dec) (update :y dec))))
-
-(defn report-exception! [^Exception ex]
-  (-> (if (instance? java.lang.IllegalStateException ex)
-        (.getCause ex)
-        ex)
-      .getMessage
-      (or (str ex))
-      println))
-
-(defn move-object-at!
-  "Tries to move an object that should be found in the world at position `pos`
-  in the direction given by `dir` and returns the new position (which might be
-  unchanged, in case of hitting an obstacle, or different from the expected
-  position, in case of other interactions)."
-  [pos dir]
-  (try
-    (let [new-pos (new-pos-for-move pos dir)
-          src (level/get-field-at world pos)
-          dst (level/get-field-at world new-pos)
-          obj-id (:id pos)]
-      (dosync
-       (let [obj (get (:objects @src) obj-id)]
-         (assert obj (str "The object must be found at the given position:" pos))
-         (alter src update :objects dissoc obj-id)
-         (alter dst update :objects assoc  obj-id obj)))
-      new-pos)
-    (catch Exception ex
-      (report-exception! ex)
-      pos)))
-
 (defn move-player! [dir]
-  (swap! player-pos move-object-at! dir))
+  (swap! player-pos #(movement/move-object-at! world % dir)))
 
 (defn read-and-act! []
   (case (read)
