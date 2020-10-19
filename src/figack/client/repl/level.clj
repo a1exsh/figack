@@ -1,5 +1,6 @@
 (ns figack.client.repl.level
-  (:require [figack.client.repl.level
+  (:require [figack.level :as level]
+            [figack.client.repl.level
              [render :as render :refer [Render]]])
   (:import [figack.level Field]))
 
@@ -11,19 +12,13 @@
 (defmethod render-object false [_]
   \?)
 
-(defn objects [field]
-  (->> field :objects vals))
-
-(defn is-empty? [field]
-  (->> field objects empty?))
-
-(defmulti render-field #'is-empty?)
+(defmulti render-field #'level/empty-field?)
 
 (defmethod render-field true [_]
   \.)
 
 (defmethod render-field false [field]
-  (render-object (->> field objects first)))
+  (render-object (->> field level/field-objects first)))
 
 (extend-type Field
   Render
