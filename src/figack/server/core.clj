@@ -6,6 +6,7 @@
    [ring.util.response :refer [resource-response content-type]]
    [compojure.core :refer (defroutes GET POST)]
    [compojure.route :as route]
+   [hiccup.core :as hiccup]
    [org.httpkit.server :as http-kit]
    [taoensso.sente :as sente]
    [taoensso.sente.server-adapters.http-kit :refer (get-sch-adapter)]
@@ -29,10 +30,41 @@
              (when (not= old new)
                (println (format "Connected uids change: %s" new)))))
 
-#_(defn landing-page-handler
-  [ring-req]
-  (-> (resource-response "index.html" {:root "public"})
-      (content-type "text/html;charset=utf-8")))
+(defn landing-page-handler [ring-req]
+  (hiccup/html
+    [:h1 "Sente reference example"]
+    (let [csrf-token
+          ;; (:anti-forgery-token ring-req) ; Also an option
+          (force ring.middleware.anti-forgery/*anti-forgery-token*)]
+      [:div#sente-csrf-token {:data-csrf-token csrf-token}])
+    [:p "An Ajax/WebSocket" [:strong " (random choice!)"] " has been configured for this example"]
+    [:hr]
+    [:p [:strong "Step 1: "] " try hitting the buttons:"]
+    [:p
+     [:button#btn1 {:type "button"} "chsk-send! (w/o reply)"]
+     [:button#btn2 {:type "button"} "chsk-send! (with reply)"]]
+    [:p
+     [:button#btn3 {:type "button"} "Test rapid server>user async pushes"]
+     [:button#btn4 {:type "button"} "Toggle server>user async broadcast push loop"]]
+    [:p
+     [:button#btn5 {:type "button"} "Disconnect"]
+     [:button#btn6 {:type "button"} "Reconnect"]]
+    ;;
+    [:p [:strong "Step 2: "] " observe std-out (for server output) and below (for client output):"]
+    [:textarea#output {:style "width: 100%; height: 200px;"}]
+    ;;
+    [:hr]
+    [:h2 "Step 3: try login with a user-id"]
+    [:p  "The server can use this id to send events to *you* specifically."]
+    [:p
+     [:input#input-login {:type :text :placeholder "User-id"}]
+     [:button#btn-login {:type "button"} "Secure login!"]]
+    ;;
+    [:hr]
+    [:h2 "Step 4: want to re-randomize Ajax/WebSocket connection type?"]
+    [:p "Hit your browser's reload/refresh button"]
+    [:script {:src "cljs-out/dev-main.js"}] ; Include our cljs target
+    ))
 
 (defn login-handler
   [{:keys [session params]}]
@@ -41,12 +73,11 @@
    :session (assoc session :uid (:user-id params))})
 
 (defroutes ring-routes
-  #_(GET  "/"      ring-req (landing-page-handler          ring-req))
+  (GET  "/"      ring-req (landing-page-handler          ring-req))
   (GET  "/chsk"  ring-req (ring-ajax-get-or-ws-handshake ring-req))
   (POST "/chsk"  ring-req (ring-ajax-post                ring-req))
   (POST "/login" ring-req (login-handler                 ring-req))
   (route/resources "/")
-  ;;(route/resources "/target/" {:root })
   (route/not-found "<h1>Page not found</h1>\n"))
 
 (def main-ring-handler

@@ -8,8 +8,9 @@
         compojure/compojure {:mvn/version "1.6.2"}
         com.cognitect/transit-clj {:mvn/version "1.0.324"}
         ;;com.cognitect/transit-cljs {:mvn/version "0.8.264"}
+        hiccup/hiccup {:mvn/version "1.0.5"} ;; TODO: we only need it for CSRF
         }
- :paths ["src" "resources"]
+ :paths ["src" "resources" "target"]
  :aliases {:fig {:extra-deps {com.bhauman/rebel-readline-cljs {:mvn/version "0.1.4"}
                               com.bhauman/figwheel-main {:mvn/version "0.2.12"}}
                  :extra-paths ["target" "test"]}
