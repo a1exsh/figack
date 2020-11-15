@@ -14,9 +14,9 @@ Dungeons and Dragons a-la NetHack, using ClojureScript.
 2. Get yourself familiar with: https://figwheel.org/
 3. Start the web server:
 ```{.clj}
-    user=> (load "figack/server/core")
-    user=> (in-ns 'figack.server.core)
-    figack.server.core=> (start!)
+user=> (load "figack/server/core")
+user=> (in-ns 'figack.server.core)
+figack.server.core=> (start!)
 ```
 
 To get an interactive development environment run:
