@@ -1,11 +1,13 @@
 (ns figack.level.walls
-  (:require [figack.movement :as movement]))
+  (:require #?(:cljs cljs.reader
+               :clj  [figack.movement :as movement])))
 
 (def allowed-dirs #{:WE :NS})
 
 (defrecord Wall [dir])
+#?(:cljs (cljs.reader/register-tag-parser! 'figack.level.walls.Wall map->Wall))
 
-(derive Wall movement/blocker)
+#?(:clj (derive Wall movement/blocker))
 
 (defn make-wall [dir]
   {:pre [(contains? allowed-dirs dir)]}

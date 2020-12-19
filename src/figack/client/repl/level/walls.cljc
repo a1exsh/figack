@@ -1,6 +1,7 @@
 (ns figack.client.repl.level.walls
-  (:require [figack.client.repl.level.render :refer [Render]])
-  (:import [figack.level.walls Wall]))
+  (:require [figack.client.repl.level.render :as render])
+  ;(:import [figack.level.walls Wall])
+  )
 
 (defn which-wall [w]
   (:dir w))
@@ -13,7 +14,7 @@
 (defmethod render-wall :NS [_]
   \|)
 
-(extend-type Wall
-  Render
+(extend-type figack.level.walls.Wall
+  render/Render
   (render [this]
     (render-wall this)))

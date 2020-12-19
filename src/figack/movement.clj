@@ -1,5 +1,6 @@
 (ns figack.movement
   (:require [figack
+             [field :as field]
              [level :as level]
              [validations :as validations]]))
 
@@ -11,7 +12,7 @@
   (-> x class (isa? blocker)))
 
 (defn validate-blockers [field]
-  (when (->> field level/field-objects (filter blocker?) count (< 1))
+  (when (->> field field/objects (filter blocker?) count (< 1))
     (throw (Exception. "Movement is blocked by another object!"))))
 
 (validations/set-field-validator! ::blocked? #'validate-blockers)

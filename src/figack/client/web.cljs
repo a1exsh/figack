@@ -1,9 +1,18 @@
 (ns figack.client.web
   (:require
    clojure.string
+   cljs.reader
    [cljs.core.async :as async :refer (<! >! put! chan)]
    [taoensso.sente  :as sente :refer (cb-success?)]
    ;;[taoensso.sente.packers.transit :as sente-transit]
+
+   [figack.field]
+   [figack.level]
+   [figack.level.beings]
+   [figack.level.gold]
+   [figack.level.walls]
+
+   [figack.client.repl]
    )
   (:require-macros
    [cljs.core.async.macros :as asyncm :refer (go go-loop)]))
@@ -18,8 +27,9 @@
         ]
     ;;(timbre/debug msg)
     (println msg)
-    (aset output-el "value" (str "• " (.-value output-el) "\n" msg))
-    (aset output-el "scrollTop" (.-scrollHeight output-el))))
+    ;;(aset output-el "value" (str "• " (.-value output-el) "\n" msg))
+    ;;(aset output-el "scrollTop" (.-scrollHeight output-el))
+    ))
 
 (->output! "ClojureScript appears to have loaded correctly.")
 
@@ -37,7 +47,6 @@
       (sente/make-channel-socket-client! "/chsk" ; Must match server Ring routing URL
                                          ?csrf-token
                                          {:type   :auto
-                                          :port   8080
                                           :packer :edn})]
 
   (def chsk       chsk)
@@ -65,7 +74,9 @@
 
 (defmethod -event-msg-handler :chsk/state
   [{:as ev-msg :keys [?data]}]
-  (let [[old-state-map new-state-map] [nil nil] ;; TODO: (have vector? ?data)
+  (->output! "state change: %s" ?data)
+  (let [[old-state-map new-state-map] ?data
+        ;; TODO: (have vector? ?data)
         ]
     (if (:first-open? new-state-map)
       (->output! "Channel socket successfully established!: %s" new-state-map)
@@ -75,12 +86,34 @@
   [{:as ev-msg :keys [?data]}]
   (->output! "Push event from server: %s" ?data))
 
+;;==============================================================================
+(defonce world (atom nil))
+
+(def level-el (.getElementById js/document "level"))
+
+(defn take-world-snapshot!
+  [timeout-in-ms]
+  (chsk-send!
+   [:figack.server.core/snapshot]
+   timeout-in-ms
+   (fn [cb-reply]
+     ;;(->output! "Snapshot reply: %s" cb-reply)
+     (let [snapshot (:snapshot cb-reply)
+           rendered (with-out-str (figack.client.repl/print-snapshot snapshot))]
+       (->output! rendered)
+       (aset level-el "innerHTML" rendered)
+       (reset! world snapshot)))))
+
 (defmethod -event-msg-handler :chsk/handshake
   [{:as ev-msg :keys [?data]}]
   (let [[?uid ?csrf-token ?handshake-data] ?data]
-    (->output! "Handshake: %s" ?data)))
+    (->output! "Handshake: %s" ?data)
+    (take-world-snapshot! 1000)))
 
-;; TODO Add your (defmethod -event-msg-handler <event-id> [ev-msg] <body>)s here...
+;;==============================================================================
+(defmethod -event-msg-handler :figack.server.core/update
+  [{:as ev-msg :keys [?data]}]
+  )
 
 ;;;; Sente event router (our `event-msg-handler` loop)
 
@@ -92,83 +125,39 @@
     (sente/start-client-chsk-router!
       ch-chsk event-msg-handler)))
 
-;;;; UI events
-
-(when-let [target-el (.getElementById js/document "btn1")]
-  (.addEventListener target-el "click"
-    (fn [ev]
-      (->output! "Button 1 was clicked (won't receive any reply from server)")
-      (chsk-send! [:example/button1 {:had-a-callback? "nope"}]))))
-
-(when-let [target-el (.getElementById js/document "btn2")]
-  (.addEventListener target-el "click"
-    (fn [ev]
-      (->output! "Button 2 was clicked (will receive reply from server)")
-      (chsk-send! [:example/button2 {:had-a-callback? "indeed"}] 5000
-        (fn [cb-reply] (->output! "Callback reply: %s" cb-reply))))))
-
-(when-let [target-el (.getElementById js/document "btn3")]
-  (.addEventListener target-el "click"
-    (fn [ev]
-      (->output! "Button 3 was clicked (will ask server to test rapid async push)")
-      (chsk-send! [:example/test-rapid-push]))))
-
-(when-let [target-el (.getElementById js/document "btn4")]
-  (.addEventListener target-el "click"
-    (fn [ev]
-      (->output! "Button 4 was clicked (will toggle async broadcast loop)")
-      (chsk-send! [:example/toggle-broadcast] 5000
-        (fn [cb-reply]
-          (when (cb-success? cb-reply)
-            (let [loop-enabled? cb-reply]
-              (if loop-enabled?
-                (->output! "Async broadcast loop now enabled")
-                (->output! "Async broadcast loop now disabled")))))))))
-
-(when-let [target-el (.getElementById js/document "btn5")]
-  (.addEventListener target-el "click"
-                     (fn [ev]
-                       (->output! "Disconnecting")
-                       (sente/chsk-disconnect! chsk))))
-
-(when-let [target-el (.getElementById js/document "btn6")]
-  (.addEventListener target-el "click"
-                     (fn [ev]
-                       (->output! "Reconnecting")
-                       (sente/chsk-reconnect! chsk))))
-
-(when-let [target-el (.getElementById js/document "btn-login")]
-  (.addEventListener target-el "click"
-    (fn [ev]
-      (.preventDefault ev)
-      (let [user-id (.-value (.getElementById js/document "input-login"))]
-        (if (clojure.string/blank? user-id)
-          (js/alert "Please enter a user-id first")
-          (do
-            (->output! "Logging in with user-id %s" user-id)
-
-            ;;; Use any login procedure you'd like. Here we'll trigger an Ajax
-            ;;; POST request that resets our server-side session. Then we ask
-            ;;; our channel socket to reconnect, thereby picking up the new
-            ;;; session.
-
-            (sente/ajax-lite "http://localhost:8080/login"
-                             {:method :post
-                              ;;:port    8080
-                              :headers {:X-CSRF-Token (:csrf-token @chsk-state)}
-                              :params  {:user-id (str user-id)}}
-
-                             (fn [{:keys [success? ] :as  ajax-resp}]
-                               (->output! "Ajax login response: %s" ajax-resp)
-                               (if-not success?
-                                 (->output! "Login failed")
-                                 (do
-                                   (->output! "Login successful")
-                                   (sente/chsk-reconnect! chsk)))))))))))
-
 ;;;; Init stuff
 
-(defn start! [] (start-router!))
+(comment
+  (defn login
+    [user-id]
+    (do
+      (->output! "Logging in with user-id %s" user-id)
+      (sente/ajax-lite "/login"
+                       {:method :post
+                        :headers {:X-CSRF-Token (:csrf-token @chsk-state)}
+                        :params  {:user-id (str user-id)}}
 
-;;(defonce _start-once (start!))
+                       (fn [{:keys [success?] :as ajax-resp}]
+                         (->output! "Ajax login response: %s" ajax-resp)
+                         (if-not success?
+                           (->output! "Login failed")
+                           (do
+                             (->output! "Login successful")
+                             (sente/chsk-reconnect! chsk)))))))
 
+
+  (when-let [target-el (.getElementById js/document "login")]
+    (.addEventListener target-el "click"
+                       (fn [ev]
+                         (->output! "Login!")
+                         (login "ash"))))
+
+  (when-let [target-el (.getElementById js/document "start")]
+    (.addEventListener target-el "click"
+                       (fn [ev]
+                         (->output! "Start!")
+                         (take-world-snapshot! 5000)))))
+
+(defn start!
+  []
+  (start-router!))

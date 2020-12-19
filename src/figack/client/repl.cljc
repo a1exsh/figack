@@ -12,6 +12,5 @@
   (clojure.string/join (map render/render line)))
 
 (defn print-snapshot [fields]
-  (println)
   (doseq [y (range level/height)]
     (println (render-line (level/get-line fields y)))))

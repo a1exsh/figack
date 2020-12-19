@@ -4,4 +4,4 @@
   (render [this]))
 
 (defn has-renderer? [x]
-  (->> x type (extends? Render)))
+  (satisfies? Render x))

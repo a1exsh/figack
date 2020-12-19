@@ -10,7 +10,9 @@
    [org.httpkit.server :as http-kit]
    [taoensso.sente :as sente]
    [taoensso.sente.server-adapters.http-kit :refer (get-sch-adapter)]
-   [taoensso.sente.packers.transit :as sente-transit]))
+   [taoensso.sente.packers.transit :as sente-transit]
+   ;;
+   [figack.server.world :as world]))
 
 (let [{:keys [ch-recv send-fn connected-uids
               ajax-post-fn ajax-get-or-ws-handshake-fn]}
@@ -30,41 +32,17 @@
              (when (not= old new)
                (println (format "Connected uids change: %s" new)))))
 
-(defn landing-page-handler [ring-req]
+(defn landing-page-handler
+  [ring-req]
   (hiccup/html
-    [:h1 "Sente reference example"]
-    (let [csrf-token
-          ;; (:anti-forgery-token ring-req) ; Also an option
-          (force ring.middleware.anti-forgery/*anti-forgery-token*)]
-      [:div#sente-csrf-token {:data-csrf-token csrf-token}])
-    [:p "An Ajax/WebSocket" [:strong " (random choice!)"] " has been configured for this example"]
-    [:hr]
-    [:p [:strong "Step 1: "] " try hitting the buttons:"]
-    [:p
-     [:button#btn1 {:type "button"} "chsk-send! (w/o reply)"]
-     [:button#btn2 {:type "button"} "chsk-send! (with reply)"]]
-    [:p
-     [:button#btn3 {:type "button"} "Test rapid server>user async pushes"]
-     [:button#btn4 {:type "button"} "Toggle server>user async broadcast push loop"]]
-    [:p
-     [:button#btn5 {:type "button"} "Disconnect"]
-     [:button#btn6 {:type "button"} "Reconnect"]]
-    ;;
-    [:p [:strong "Step 2: "] " observe std-out (for server output) and below (for client output):"]
-    [:textarea#output {:style "width: 100%; height: 200px;"}]
-    ;;
-    [:hr]
-    [:h2 "Step 3: try login with a user-id"]
-    [:p  "The server can use this id to send events to *you* specifically."]
-    [:p
-     [:input#input-login {:type :text :placeholder "User-id"}]
-     [:button#btn-login {:type "button"} "Secure login!"]]
-    ;;
-    [:hr]
-    [:h2 "Step 4: want to re-randomize Ajax/WebSocket connection type?"]
-    [:p "Hit your browser's reload/refresh button"]
-    [:script {:src "cljs-out/dev-main.js"}] ; Include our cljs target
-    ))
+   [:div#sente-csrf-token
+    {:data-csrf-token (force ring.middleware.anti-forgery/*anti-forgery-token*)}
+    [:textarea#level {:readonly "true" :rows 25 :cols 80}]
+    ;;[:button#login {:type "button"} "Login"]
+    ;;[:button#start {:type "button"} "Start!"]
+    ]
+   [:script {:src "cljs-out/dev-main.js"}] ; Include our cljs target
+   ))
 
 (defn login-handler
   [{:keys [session params]}]
@@ -73,7 +51,7 @@
    :session (assoc session :uid (:user-id params))})
 
 (defroutes ring-routes
-  (GET  "/"      ring-req (landing-page-handler          ring-req))
+  (GET  "/"      ring-req (#'landing-page-handler        ring-req))
   (GET  "/chsk"  ring-req (ring-ajax-get-or-ws-handshake ring-req))
   (POST "/chsk"  ring-req (ring-ajax-post                ring-req))
   (POST "/login" ring-req (login-handler                 ring-req))
@@ -119,13 +97,31 @@
   []
   (reset! broadcast-enabled? false))
 
+(defmulti -event-msg-handler
+  "Multimethod to handle Sente `event-msg`s"
+  :id ; Dispatch on event-id
+  )
+
 (defn event-msg-handler
   "Wraps `-event-msg-handler` with logging, error catching, etc."
   [{:as ev-msg :keys [id ?data event]}]
-  ;;(-event-msg-handler ev-msg) ; Handle event-msgs on a single thread
+  (println (format "MSG: %s" ev-msg))
+
+  (-event-msg-handler ev-msg) ; Handle event-msgs on a single thread
   ;; (future (-event-msg-handler ev-msg)) ; Handle event-msgs on a thread pool
-  (println (format "msg: %s" ev-msg))
   )
+
+(defmethod -event-msg-handler
+  :default ; Default/fallback case (no other matching handler)
+  [{:as ev-msg :keys [event]}]
+  (println (format "Unhandled event: %s" event)))
+
+;;==============================================================================
+(defmethod -event-msg-handler ::snapshot
+  [{:as ev-msg :keys [?reply-fn]}]
+  (let [snapshot (world/make-snapshot)]
+    ;;(println (format "Sending snapshot: %s" snapshot))
+    (?reply-fn {:snapshot snapshot})))
 
 (defonce router (atom nil))
 
@@ -161,15 +157,17 @@
 
 (defn stop!
   []
-  (stop-router!)
+  #_(stop-example-broadcaster!)
   (stop-web-server!)
-  (stop-example-broadcaster!))
+  (stop-router!)
+  (world/destroy-world!))
 
 (defn start!
   []
+  (world/create-world!)
   (start-router!)
   (start-web-server! server-port)
-  (start-example-broadcaster!))
+  #_(start-example-broadcaster!))
 
 (comment
   (start!)
