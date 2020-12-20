@@ -71,27 +71,24 @@
 
 (defonce broadcast-enabled? (atom nil))
 
+(defn broadcast-snapshot!
+  [snapshot]
+  (let [uids (:any @connected-uids)]
+    (when (-> uids count (> 0))
+      #_(println (format "Broadcasting server>user: %s uids" (count uids)))
+      (doseq [uid uids]
+        (chsk-send! uid [::snapshot {:snapshot snapshot}])))))
+
 (defn start-example-broadcaster!
   "As an example of server>user async pushes, setup a loop to broadcast an
   event to all connected users every 10 seconds"
   []
   (reset! broadcast-enabled? true)
-  (letfn [(broadcast!
-            [i]
-            (let [uids (:any @connected-uids)]
-              (println (format "Broadcasting server>user: %s uids" (count uids)))
-              (doseq [uid uids]
-                (chsk-send! uid
-                            [:some/broadcast
-                             {:what-is-this "An async broadcast pushed from server"
-                              :how-often "Every 10 seconds"
-                              :to-whom uid
-                              :i i}]))))]
-    (go-loop [i 0]
-      (<! (async/timeout 10000))
-      (when @broadcast-enabled?
-        (broadcast! i)
-        (recur (inc i))))))
+  (go-loop [i 0]
+    (<! (async/timeout 1000))
+    (when @broadcast-enabled?
+      (broadcast-snapshot! (world/make-snapshot))
+      (recur (inc i)))))
 
 (defn stop-example-broadcaster!
   []
@@ -157,7 +154,7 @@
 
 (defn stop!
   []
-  #_(stop-example-broadcaster!)
+  (stop-example-broadcaster!)
   (stop-web-server!)
   (stop-router!)
   (world/destroy-world!))
@@ -167,8 +164,11 @@
   (world/create-world!)
   (start-router!)
   (start-web-server! server-port)
-  #_(start-example-broadcaster!))
+  (start-example-broadcaster!))
 
 (comment
   (start!)
-  (stop!))
+  (stop!)
+
+  (start-example-broadcaster!)
+  (stop-example-broadcaster!))

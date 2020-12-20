@@ -82,14 +82,33 @@
       (->output! "Channel socket successfully established!: %s" new-state-map)
       (->output! "Channel socket state change: %s"              new-state-map))))
 
+(defmulti msg-handler first)
+
+(defmethod msg-handler :default
+  [[kind _]]
+  (->output! "Unhandled msg: %s" kind))
+
 (defmethod -event-msg-handler :chsk/recv
   [{:as ev-msg :keys [?data]}]
-  (->output! "Push event from server: %s" ?data))
+  (->output! "Push event from server: %s" (first ?data))
+  (msg-handler ?data))
 
 ;;==============================================================================
 (defonce world (atom nil))
 
+(defmethod msg-handler :figack.server.core/snapshot
+  [[_ {:keys [snapshot]}]]
+  (reset! world snapshot))
+
 (def level-el (.getElementById js/document "level"))
+
+(defn render-level
+  [_ _ _ new-state]
+  (let [rendered (with-out-str (figack.client.repl/print-snapshot new-state))]
+    #_(->output! rendered)
+    (aset level-el "innerHTML" rendered)))
+
+(add-watch world :render-level render-level)
 
 (defn take-world-snapshot!
   [timeout-in-ms]
@@ -98,11 +117,7 @@
    timeout-in-ms
    (fn [cb-reply]
      ;;(->output! "Snapshot reply: %s" cb-reply)
-     (let [snapshot (:snapshot cb-reply)
-           rendered (with-out-str (figack.client.repl/print-snapshot snapshot))]
-       (->output! rendered)
-       (aset level-el "innerHTML" rendered)
-       (reset! world snapshot)))))
+     (reset! world (:snapshot cb-reply)))))
 
 (defmethod -event-msg-handler :chsk/handshake
   [{:as ev-msg :keys [?data]}]
