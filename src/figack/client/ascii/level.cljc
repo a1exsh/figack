@@ -1,19 +1,17 @@
 (ns figack.client.ascii.level
   (:require [figack.field :as field]
             [figack.level :as level]
-            [figack.client.ascii.level.render :as render])
-  ;(:import [figack.field Field])
-  )
+            [figack.client.ascii.level.render :as render]))
 
-(defmulti render-object #'render/has-renderer?)
+(defmulti  render-object #'render/has-renderer?)
 
 (defmethod render-object true [obj]
-  (render/render obj))
+  (render/to-char obj))
 
 (defmethod render-object false [_]
   \?)
 
-(defmulti render-field #'field/empty-field?)
+(defmulti  render-field #'field/empty-field?)
 
 (defmethod render-field true [_]
   \.)
@@ -23,5 +21,5 @@
 
 (extend-type figack.field.Field
   render/Render
-  (render [this]
+  (to-char [this]
     (render-field this)))

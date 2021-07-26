@@ -9,7 +9,7 @@
             figack.client.ascii.level.walls))
 
 (defn render-line [line]
-  (clojure.string/join (map render/render line)))
+  (clojure.string/join (map render/to-char line)))
 
 (defn print-snapshot [fields]
   (doseq [y (range level/height)]

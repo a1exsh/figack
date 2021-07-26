@@ -1,7 +1,7 @@
 (ns figack.client.ascii.level.render)
 
 (defprotocol Render
-  (render [this]))
+  (to-char [this]))
 
 (defn has-renderer? [x]
   (satisfies? Render x))

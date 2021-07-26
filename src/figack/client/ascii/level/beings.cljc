@@ -5,12 +5,12 @@
 (defn which-being [being]
   (:class being))
 
-(defmulti render-being #'which-being)
+(defmulti  render-being #'which-being)
 
 (defmethod render-being :human [_]
   \@)
 
 (extend-type figack.level.beings.Being
   render/Render
-  (render [this]
+  (to-char [this]
     (render-being this)))

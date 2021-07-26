@@ -4,5 +4,5 @@
 
 (extend-type figack.level.gold.Gold
   render/Render
-  (render [_]
+  (to-char [_]
     \$))

@@ -5,7 +5,7 @@
 (defn which-wall [w]
   (:dir w))
 
-(defmulti render-wall #'which-wall)
+(defmulti  render-wall #'which-wall)
 
 (defmethod render-wall :WE [_]
   \-)
@@ -15,5 +15,5 @@
 
 (extend-type figack.level.walls.Wall
   render/Render
-  (render [this]
+  (to-char [this]
     (render-wall this)))
