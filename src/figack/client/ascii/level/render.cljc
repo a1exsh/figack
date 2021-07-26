@@ -1,4 +1,4 @@
-(ns figack.client.repl.level.render)
+(ns figack.client.ascii.level.render)
 
 (defprotocol Render
   (render [this]))

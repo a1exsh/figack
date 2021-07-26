@@ -1,5 +1,5 @@
-(ns figack.client.repl.level.beings
-  (:require [figack.client.repl.level.render :as render])
+(ns figack.client.ascii.level.beings
+  (:require [figack.client.ascii.level.render :as render])
   ;(:import [figack.level.beings Being])
   )
 

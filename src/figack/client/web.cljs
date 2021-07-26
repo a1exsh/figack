@@ -11,7 +11,7 @@
             [figack.level.gold]
             [figack.level.walls]
 
-            [figack.client.repl]))
+            [figack.client.ascii]))
 
 ;; (timbre/set-level! :trace) ; Uncomment for more logging
 
@@ -37,7 +37,7 @@
 (defn render-level
   [_ _ _ new-state]
   ;;(->output! (str new-state))
-  (let [rendered (with-out-str (figack.client.repl/print-snapshot new-state))]
+  (let [rendered (with-out-str (figack.client.ascii/print-snapshot new-state))]
     #_(->output! rendered)
     (aset level-el "innerHTML" rendered)))
 

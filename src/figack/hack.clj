@@ -1,7 +1,6 @@
 (ns figack.hack
-  (:require [figack.server.world
-             :refer [create-world! move-player!] :as world]
-            [figack.client.repl :as repl]))
+  (:require [figack.server.world :refer [create-world! move-player!] :as world]
+            [figack.client.ascii :as ascii]))
 
 (defn print-help []
   (println "h=help q=quit"))
@@ -23,7 +22,7 @@
 (defn play! []
   (loop []
     (println)
-    (repl/print-snapshot (world/make-snapshot))
+    (ascii/print-snapshot (world/make-snapshot))
     (when-not (= ::quit (read-and-act!))
       (recur))))
 

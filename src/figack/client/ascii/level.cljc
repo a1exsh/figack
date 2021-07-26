@@ -1,7 +1,7 @@
-(ns figack.client.repl.level
+(ns figack.client.ascii.level
   (:require [figack.field :as field]
             [figack.level :as level]
-            [figack.client.repl.level.render :as render])
+            [figack.client.ascii.level.render :as render])
   ;(:import [figack.field Field])
   )
 

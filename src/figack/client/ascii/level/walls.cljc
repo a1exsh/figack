@@ -1,5 +1,5 @@
-(ns figack.client.repl.level.walls
-  (:require [figack.client.repl.level.render :as render])
+(ns figack.client.ascii.level.walls
+  (:require [figack.client.ascii.level.render :as render])
   ;(:import [figack.level.walls Wall])
   )
 
