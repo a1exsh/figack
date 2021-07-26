@@ -1,7 +1,6 @@
 (ns figack.client.ascii.level.beings
-  (:require [figack.client.ascii.level.render :as render])
-  ;(:import [figack.level.beings Being])
-  )
+  (:require figack.level.beings
+            [figack.client.ascii.level.render :as render]))
 
 (defn which-being [being]
   (:class being))

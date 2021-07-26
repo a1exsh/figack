@@ -1,7 +1,6 @@
 (ns figack.client.ascii.level.walls
-  (:require [figack.client.ascii.level.render :as render])
-  ;(:import [figack.level.walls Wall])
-  )
+  (:require figack.level.walls
+            [figack.client.ascii.level.render :as render]))
 
 (defn which-wall [w]
   (:dir w))

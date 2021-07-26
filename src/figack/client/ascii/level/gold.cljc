@@ -1,7 +1,6 @@
 (ns figack.client.ascii.level.gold
-  (:require [figack.client.ascii.level.render :as render])
-  ;(:import [figack.level.gold Gold])
-  )
+  (:require figack.level.gold
+            [figack.client.ascii.level.render :as render]))
 
 (extend-type figack.level.gold.Gold
   render/Render
