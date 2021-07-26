@@ -3,7 +3,7 @@
             [ring.middleware [defaults] ;;[anti-forgery]
              ]
             ;;[ring.util.response :refer [resource-response content-type]]
-            [compojure.core :refer [defroutes GET POST]]
+            [compojure.core :refer [defroutes]]
             [compojure.route :as route]
             [ring.adapter.jetty9 :as jetty]
             [ring.adapter.jetty9.websocket :as ws]
@@ -48,7 +48,6 @@
        (broadcast-world-snapshot (world/make-snapshot))))})
 
 (defroutes ring-routes
-  (GET "/" [] (slurp "resources/public/index.html"))
   (route/resources "/")
   (route/not-found "<h1>Page not found</h1>\n"))
 

@@ -40,6 +40,8 @@ To create a production build run:
     rm -rf target/public
     clojure -M:fig:min
 
+Then open the landing page URL: http://localhost:8080/index.html
+
 ## License
 
 Copyright © 2019 Figack Devs.
