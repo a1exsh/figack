@@ -43,14 +43,20 @@
 
 (add-watch world :render-level render-level)
 
+(def keycode->dir
+  {38 :N
+   40 :S
+   37 :W
+   39 :E})
+
 (defn make-keydown-handler
   [sink]
   (fn [event]
     (let [keycode (.-keyCode event)]
-      (if (and (>= keycode 37)
-               (<= keycode 40))
+      (if-some [dir (keycode->dir keycode)]
         (macros/go
-          (async/>! sink (pr-str {:keycode keycode})))))))
+          (async/>! sink (pr-str {:action :move
+                                  :dir     dir})))))))
 
 (defn start!
   []
@@ -60,5 +66,10 @@
       (.addEventListener js/document "keydown" (make-keydown-handler sink))
 
       (while true
-        (reset! world (:world (cljs.reader/read-string (async/<! source))))
-        (async/<! (async/timeout 1))))))
+        (let [raw-str (async/<! source)
+              ;; _ (->output! "raw-str: " raw-str)
+              parsed  (cljs.reader/read-string raw-str)]
+          (->output! "seqno: " (:seqno parsed))
+          (reset! world (:world parsed)))
+        ;; (async/<! (async/timeout 1))
+        ))))

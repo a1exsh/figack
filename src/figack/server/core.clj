@@ -14,60 +14,81 @@
             [figack.server.world :as world])
   (:import (org.eclipse.jetty.server Server)))
 
-(defonce players (atom {}))
+(defonce ws->conn (atom {}))
 
-(add-watch players :debug
+(add-watch ws->conn :debug
            (fn [_ _ old new]
              (when (not= old new)
-               (print "Players change:")
+               (print "Connections changed: ")
                (pprint new))))
 
-(defn broadcast-world-snapshot
-  [snapshot]
-  (let [data (pr-str {:world snapshot})]
-    (doseq [ws (->>  @players vals (map :ws))]
-      (println "sending to:" ws)
-      (ws/send! ws data))))
+(defn broadcast-world-snapshot [snapshot]
+  (let [data {:world snapshot}]
+    (doseq [conn (vals @ws->conn)
+            :let [{:keys [ws player]} conn
+                  seqno (:seqno @player)]]
+      (println "[" seqno "] sending to:" (str ws))
+      (ws/send! ws (-> data
+                       (assoc :seqno seqno)
+                       pr-str)))))
 
-;; defonce?
+(defn on-connect [ws]
+  (let [wsk    (str ws)
+        _ (println "on-connect:" wsk)
+        pos    (dosync
+                (world/add-object-at! (level/random-pos) (world/make-player)))
+        player (agent {:seqno 1
+                       :pos   pos})
+        conn   {:ws     ws
+                :player player}]
+    (swap! ws->conn assoc wsk conn))
+
+  ;; TODO: it should be more discrete
+  (broadcast-world-snapshot (world/make-snapshot)))
+
+(defn on-close [ws _ _]
+  (let [wsk  (str ws)
+        _ (println "on-close:" wsk)
+        conn (get @ws->conn wsk)]
+    (swap! ws->conn dissoc wsk)
+
+    (if-some [player (:player conn)]
+      (dosync
+       (world/del-object-at! (:pos @player)))
+      (println "No conn for ws:" wsk))
+
+    ;; TODO: it should be more discrete
+    (broadcast-world-snapshot (world/make-snapshot))))
+
+;; ======================================================================
+(defn message->action [_player message] (:action message))
+
+(defmulti handle-action! #'message->action)
+
+(defmethod handle-action! :move [player {dir :dir}]
+  (let [res (dosync
+             (-> player
+                 (update :pos #(movement/move-object-at! world/world % dir))
+                 (update :seqno inc)))]
+
+    ;; TODO: it should be more discrete
+    (broadcast-world-snapshot (world/make-snapshot))
+
+    res))
+;; ======================================================================
+
+(defn on-text [ws text-message]
+  (let [wsk     (str ws)
+        _ (println "on-text:" wsk)
+        conn    (get @ws->conn wsk)
+        player  (:player conn)
+        message (clojure.edn/read-string text-message)]
+    (send player handle-action! message)))
+
 (defonce ws-handler
-  {:on-connect
-   (fn [ws]
-     (println (format "on-connect: %s" ws))
-     (let [wsk (str ws)
-           pos (dosync
-                (world/add-object-at! (level/random-pos) (world/make-player)))]
-       (swap! players assoc wsk {:ws ws
-                                 :pos (agent pos)}))
-     (broadcast-world-snapshot (world/make-snapshot)))
-
-   :on-close
-   (fn [ws _ _]
-     (println (format "on-close: %s" ws))
-     (let [wsk (str ws)
-           pos (-> @players (get wsk) :pos)]
-       (swap! players dissoc wsk)
-       (dosync
-        (world/del-object-at! @pos))))
-
-   :on-text
-   (fn [ws text-message]
-     (let [wsk (str ws)
-           pos (-> @players (get wsk) :pos)
-           message (clojure.edn/read-string text-message)
-           keycode (:keycode message) ;; TODO: keycode is a client-side concern
-           dir (case keycode
-                 38 :N
-                 40 :S
-                 37 :W
-                 39 :E
-                 nil)]
-       (if-not dir
-         (println (format "Unknown keycode: %d" keycode))
-         (send pos #(dosync
-                     (movement/move-object-at! world/world % dir))))
-       ;; TODO: shouldn't be here
-       (broadcast-world-snapshot (world/make-snapshot))))})
+  {:on-connect #'on-connect
+   :on-close   #'on-close
+   :on-text    #'on-text})
 
 (defroutes ring-routes
   (route/resources "/")
@@ -79,6 +100,7 @@
    ring-routes
    ring.middleware.defaults/site-defaults))
 
+;; FIXME: to avoid caching problems we should use figwheel's server instead
 (defonce web-server (atom nil))
 
 (defn start-web-server!
@@ -88,19 +110,17 @@
    (reset! web-server (jetty/run-jetty web-app {:port 8080
                                                 :join? join?
                                                 :websockets {"/websockets/" ws-handler}}))))
-(defn stop-web-server!
-  []
+
+(defn stop-web-server! []
   (when-let [server @web-server]
     (.stop ^Server server)
     (reset! web-server nil)))
 
-(defn start!
-  []
+(defn start! []
   (world/create-world!)
   (start-web-server!))
 
-(defn stop!
-  []
+(defn stop! []
   (stop-web-server!)
   (world/destroy-world!))
 
