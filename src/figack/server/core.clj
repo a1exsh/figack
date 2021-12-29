@@ -1,5 +1,6 @@
 (ns figack.server.core
   (:require clojure.edn
+            [clojure.pprint :refer [pprint]]
             [ring.middleware [defaults] ;;[anti-forgery]
              ]
             ;;[ring.util.response :refer [resource-response content-type]]
@@ -8,43 +9,64 @@
             [ring.adapter.jetty9 :as jetty]
             [ring.adapter.jetty9.websocket :as ws]
             ;;
+            [figack.level :as level]
+            [figack.movement :as movement]
             [figack.server.world :as world])
   (:import (org.eclipse.jetty.server Server)))
 
-(defonce connected-ws (atom {}))
+(defonce players (atom {}))
 
-(add-watch connected-ws :connected-ws
+(add-watch players :debug
            (fn [_ _ old new]
              (when (not= old new)
-               (println (format "Connected ws change: %s" new)))))
+               (print "Players change:")
+               (pprint new))))
 
 (defn broadcast-world-snapshot
   [snapshot]
   (let [data (pr-str {:world snapshot})]
-    (doseq [ws (vals @connected-ws)]
-      ;;(println "sending to:" ws)
+    (doseq [ws (->>  @players vals (map :ws))]
+      (println "sending to:" ws)
       (ws/send! ws data))))
 
 ;; defonce?
 (defonce ws-handler
   {:on-connect
    (fn [ws]
-     (swap! connected-ws assoc  (str ws) ws) ;; TODO: id?
+     (println (format "on-connect: %s" ws))
+     (let [wsk (str ws)
+           pos (dosync
+                (world/add-object-at! (level/random-pos) (world/make-player)))]
+       (swap! players assoc wsk {:ws ws
+                                 :pos (agent pos)}))
      (broadcast-world-snapshot (world/make-snapshot)))
 
    :on-close
    (fn [ws _ _]
-     (swap! connected-ws dissoc (str ws) ws))
+     (println (format "on-close: %s" ws))
+     (let [wsk (str ws)
+           pos (-> @players (get wsk) :pos)]
+       (swap! players dissoc wsk)
+       (dosync
+        (world/del-object-at! @pos))))
 
    :on-text
    (fn [ws text-message]
-     (let [message (clojure.edn/read-string text-message)
-           ws-id (str ws)]
-       (case (:keycode message)
-         38 (world/move-player! :N) ;; TODO: which player?..
-         40 (world/move-player! :S)
-         37 (world/move-player! :W)
-         39 (world/move-player! :E))
+     (let [wsk (str ws)
+           pos (-> @players (get wsk) :pos)
+           message (clojure.edn/read-string text-message)
+           keycode (:keycode message) ;; TODO: keycode is a client-side concern
+           dir (case keycode
+                 38 :N
+                 40 :S
+                 37 :W
+                 39 :E
+                 nil)]
+       (if-not dir
+         (println (format "Unknown keycode: %d" keycode))
+         (send pos #(dosync
+                     (movement/move-object-at! world/world % dir))))
+       ;; TODO: shouldn't be here
        (broadcast-world-snapshot (world/make-snapshot))))})
 
 (defroutes ring-routes

@@ -15,3 +15,13 @@
 
 (defn get-field-at [fields {:keys [x y]}]
   (nth (get-line fields y) x))
+
+(defn random-x []
+  (rand-int width))
+
+(defn random-y []
+  (rand-int height))
+
+(defn random-pos []
+  {:x (random-x)
+   :y (random-y)})

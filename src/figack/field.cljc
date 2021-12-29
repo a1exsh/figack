@@ -34,3 +34,9 @@
      (let [obj-id (next-object-id)]
        (alter field update :objects assoc obj-id obj)
        obj-id)))
+
+#?(:clj
+   (defn del-object!
+     "Deletes an object identified by its object id from the field."
+     [field obj-id]
+     (alter field update :objects dissoc obj-id)))
