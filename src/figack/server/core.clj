@@ -23,18 +23,19 @@
                (pprint new))))
 
 (defn broadcast-world-snapshot [snapshot]
-  (let [data {:world snapshot}]
-    (doseq [conn (vals @ws->conn)
+  (let [data  {:world snapshot}
+        conns (vals @ws->conn)]
+    (println "broadcasting to" (count conns) "conns")
+    (doseq [conn conns
             :let [{:keys [ws player]} conn
-                  seqno (:seqno @player)]]
+                  seqno   (:seqno @player)
+                  to-send (assoc data :seqno seqno)]]
       (println "[" seqno "] sending to:" (str ws))
-      (ws/send! ws (-> data
-                       (assoc :seqno seqno)
-                       pr-str)))))
+      (ws/send! ws (pr-str to-send)))))
 
 (defn on-connect [ws]
   (let [wsk    (str ws)
-        _ (println "on-connect:" wsk)
+        ;; _ (println "on-connect:" wsk)
         pos    (dosync
                 (world/add-object-at! (level/random-pos) (world/make-player)))
         player (agent {:seqno 1
@@ -48,7 +49,7 @@
 
 (defn on-close [ws _ _]
   (let [wsk  (str ws)
-        _ (println "on-close:" wsk)
+        ;; _ (println "on-close:" wsk)
         conn (get @ws->conn wsk)]
     (swap! ws->conn dissoc wsk)
 
@@ -66,11 +67,11 @@
 (defmulti handle-action! #'message->action)
 
 (defmethod handle-action! :move [player {dir :dir}]
-  (let [res (dosync
-             (-> player
-                 (update :pos #(movement/move-object-at! world/world % dir))
-                 (update :seqno inc)))]
-
+  (println "move:" dir)
+  (let [res (-> player
+                (update :pos #(movement/move-object-at! world/world % dir))
+                (update :seqno inc))]
+    ;; (println "tx done")
     ;; TODO: it should be more discrete
     (broadcast-world-snapshot (world/make-snapshot))
 
@@ -79,7 +80,7 @@
 
 (defn on-text [ws text-message]
   (let [wsk     (str ws)
-        _ (println "on-text:" wsk)
+        ;; _ (println "on-text:" wsk)
         conn    (get @ws->conn wsk)
         player  (:player conn)
         message (clojure.edn/read-string text-message)]
@@ -112,7 +113,7 @@
                                                 :websockets {"/websockets/" ws-handler}}))))
 
 (defn stop-web-server! []
-  (when-let [server @web-server]
+  (when-some [server @web-server]
     (.stop ^Server server)
     (reset! web-server nil)))
 
@@ -124,6 +125,10 @@
   (stop-web-server!)
   (world/destroy-world!))
 
+(defn restart! []
+  (stop!)
+  (start!))
+
 (comment
-  (start!)
-  (stop!))
+  (restart!)
+  )

@@ -36,7 +36,7 @@
 
 (defn render-level
   [_ _ _ new-state]
-  ;;(->output! (str new-state))
+  ;; (->output! "new-state: " (str new-state))
   (let [rendered (with-out-str (figack.client.ascii/print-snapshot new-state))]
     #_(->output! rendered)
     (aset level-el "innerHTML" rendered)))
@@ -56,7 +56,7 @@
       (if-some [dir (keycode->dir keycode)]
         (macros/go
           (async/>! sink (pr-str {:action :move
-                                  :dir     dir})))))))
+                                  :dir    dir})))))))
 
 (defn start!
   []
@@ -65,11 +65,15 @@
 
       (.addEventListener js/document "keydown" (make-keydown-handler sink))
 
-      (while true
-        (let [raw-str (async/<! source)
-              ;; _ (->output! "raw-str: " raw-str)
-              parsed  (cljs.reader/read-string raw-str)]
-          (->output! "seqno: " (:seqno parsed))
-          (reset! world (:world parsed)))
-        ;; (async/<! (async/timeout 1))
-        ))))
+      (loop []
+        (when-some [raw-str (async/<! source)]
+          ;; (->output! "raw-str: " raw-str)
+
+          (let [parsed (cljs.reader/read-string raw-str)]
+            ;; (->output! "seqno: " (:seqno parsed))
+            (reset! world (:world parsed)))
+          ;; (async/<! (async/timeout 1))
+
+          (recur)))
+
+      (->output! "Connection closed!"))))

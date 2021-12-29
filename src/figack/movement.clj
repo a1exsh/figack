@@ -32,7 +32,7 @@
     :W  (-> pos (update :x dec))
     :NW (-> pos (update :x dec) (update :y dec))))
 
-(defn- report-exception! [^Exception ex]
+(defn- report-exception! [^Throwable ex]
   (-> (if (instance? java.lang.IllegalStateException ex)
         (.getCause ex)
         ex)
