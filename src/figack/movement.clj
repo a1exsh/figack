@@ -32,31 +32,16 @@
     :W  (-> pos (update :x dec))
     :NW (-> pos (update :x dec) (update :y dec))))
 
-(defn- report-exception! [^Throwable ex]
-  (-> (if (instance? java.lang.IllegalStateException ex)
-        (.getCause ex)
-        ex)
-      .getMessage
-      (or (str ex))
-      println))
-
 (defn move-object-at!
   "Tries to move an object that should be found in the level `lev` at position
-  `pos` in the direction given by `dir` and returns the new position (which
-  might be unchanged, in case of hitting an obstacle, or different from the
-  expected position, in case of other interactions)."
+  `pos` in the direction given by `dir` and returns the new position."
   [lev pos dir]
-  (try
-    (let [new-pos (new-pos-for-move pos dir)
-          src (level/get-field-at lev pos)
-          dst (level/get-field-at lev new-pos)
-          obj-id (:id pos)]
-      (dosync
-       (let [obj (get (:objects @src) obj-id)]
-         (assert obj (str "The object must be found at the given position:" pos))
-         (alter src update :objects dissoc obj-id)
-         (alter dst update :objects assoc  obj-id obj)))
-      new-pos)
-    (catch Exception ex
-      (report-exception! ex)
-      pos)))
+  (let [new-pos (new-pos-for-move pos dir)
+        src     (level/get-field-at lev pos)
+        dst     (level/get-field-at lev new-pos)
+        obj-id  (:id pos)]
+    (let [obj (get (:objects @src) obj-id)]
+      (assert obj (str "The object must be found at the given position:" pos))
+      (alter src update :objects dissoc obj-id)
+      (alter dst update :objects assoc  obj-id obj))
+    new-pos))

@@ -22,34 +22,51 @@
                (print "Connections changed: ")
                (pprint new))))
 
-(defn broadcast-world-snapshot [snapshot]
-  (let [data  {:world snapshot}
-        conns (vals @ws->conn)]
-    (println "broadcasting to" (count conns) "conns")
-    (doseq [conn conns
-            :let [{:keys [ws player]} conn
-                  seqno   (:seqno @player)
-                  to-send (assoc data :seqno seqno)]]
-      (println "[" seqno "] sending to:" (str ws))
-      (ws/send! ws (pr-str to-send)))))
+(defn- broadcast-world-snapshot [snapshot]
+  (io!
+   (let [data  {:world snapshot}
+         conns (vals @ws->conn)]
+     (println "broadcasting to" (count conns) "conns")
+     (doseq [conn conns
+             :let [{:keys [ws player]} conn
+                   seqno   (:seqno @player)
+                   to-send (assoc data :seqno seqno)]]
+       (println "[" seqno "] sending to:" (str ws))
+       (ws/send! ws (pr-str to-send))))))
 
-(defn on-connect [ws]
-  (let [wsk    (str ws)
-        ;; _ (println "on-connect:" wsk)
-        pos    (dosync
-                (world/add-object-at! (level/random-pos) (world/make-player)))
-        player (agent {:seqno 1
-                       :pos   pos})
-        conn   {:ws     ws
-                :player player}]
-    (swap! ws->conn assoc wsk conn))
+(defn- on-player-agent-error [a ^Throwable ex]
+  (println ex)
+  #_(-> (if (instance? IllegalStateException ex)
+        (.getCause ex)
+        ex)
+      .getMessage
+      (or (str ex))
+      println))
 
-  ;; TODO: it should be more discrete
-  (broadcast-world-snapshot (world/make-snapshot)))
+(defn- on-connect [ws]
+  (try
+    (let [wsk    (str ws)
+          _ (println "on-connect:" wsk)
+          pos    (dosync
+                  (world/add-object-at! (level/random-pos world/world)
+                                        (world/make-player)))
+          player (agent {:seqno 1
+                         :pos   pos}
+                        :error-handler #'on-player-agent-error)
+          conn   {:ws     ws
+                  :player player}]
+      (swap! ws->conn assoc wsk conn))
 
-(defn on-close [ws _ _]
+    ;; TODO: it should be more discrete
+    (broadcast-world-snapshot (world/make-snapshot))
+    (catch Exception ex
+      (println ex))))
+
+@ws->conn
+
+(defn- on-close [ws _ _]
   (let [wsk  (str ws)
-        ;; _ (println "on-close:" wsk)
+        _ (println "on-close:" wsk)
         conn (get @ws->conn wsk)]
     (swap! ws->conn dissoc wsk)
 
@@ -68,9 +85,9 @@
 
 (defmethod handle-action! :move [player {dir :dir}]
   (println "move:" dir)
-  (let [res (-> player
-                (update :pos #(movement/move-object-at! world/world % dir))
-                (update :seqno inc))]
+  (let [res (dosync (-> player
+                        (update :pos #(movement/move-object-at! world/world % dir))
+                        (update :seqno inc)))]
     ;; (println "tx done")
     ;; TODO: it should be more discrete
     (broadcast-world-snapshot (world/make-snapshot))
@@ -78,13 +95,17 @@
     res))
 ;; ======================================================================
 
-(defn on-text [ws text-message]
-  (let [wsk     (str ws)
-        ;; _ (println "on-text:" wsk)
-        conn    (get @ws->conn wsk)
-        player  (:player conn)
-        message (clojure.edn/read-string text-message)]
-    (send player handle-action! message)))
+(defn- on-text [ws text-message]
+  (try
+    (let [wsk     (str ws)
+          ;; _ (println "on-text:" wsk)
+          conn    (get @ws->conn wsk)
+          player  (:player conn)
+          message (clojure.edn/read-string text-message)]
+
+      (send player handle-action! message))
+    (catch Exception ex
+      (println ex))))
 
 (defonce ws-handler
   {:on-connect #'on-connect
