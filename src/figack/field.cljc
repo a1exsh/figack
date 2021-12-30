@@ -21,6 +21,7 @@
      (ref empty-field :validator #'validations/validate-field)))
 
 #?(:clj
+   ;; TODO: could be a ref as well
    (defonce object-id (atom 0)))
 
 #?(:clj
