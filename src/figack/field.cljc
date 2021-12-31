@@ -21,7 +21,7 @@
      (ref empty-field :validator #'validations/validate-field)))
 
 #?(:clj
-   ;; TODO: could be a ref as well
+   ;; could be a ref as well, but would introduce unneeded contention
    (defonce object-id (atom 0)))
 
 #?(:clj
@@ -41,3 +41,35 @@
      "Deletes an object identified by its object id from the field."
      [field obj-id]
      (alter field update :objects dissoc obj-id)))
+
+(comment
+  "Maybe we should not have this function and rely on movements instead."
+  #?(:clj
+     (defn put-object! [field obj-id obj]
+       (alter field update :objects assoc obj-id obj))))
+
+#?(:clj
+  (defn get-object [field obj-id]
+    (->  @field
+         (get :objects)
+         (get obj-id))))
+
+#?(:cljs
+  (defn get-object [field obj-id]
+    (->  field
+         (get :objects)
+         (get obj-id))))
+
+#?(:cljs
+  (defn put-object [field obj-id obj]
+    (update field :objects assoc obj-id obj)))
+
+#?(:cljs
+  (defn del-object [field obj-id]
+    (update field :objects dissoc obj-id)))
+
+#_(let [w 2
+        x 1
+        y 1]
+    (-> [{} {} {} {:objects {123 "xxx"}}]
+        (update (+ (* y w) x) del-object 123)))

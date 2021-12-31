@@ -11,101 +11,154 @@
             ;;
             [figack.level :as level]
             [figack.movement :as movement]
+            [figack.server.log :as log]
             [figack.server.world :as world])
   (:import (org.eclipse.jetty.server Server)))
 
-(defonce ws->conn (atom {}))
+(defn- ws-key [ws]
+  "Derives the unique key from a websocket object."
+  (str ws))
 
-(add-watch ws->conn :debug
+;; maps websockets (by key) to player agents
+(defonce ws->player (atom {}))
+
+(add-watch ws->player :debug
            (fn [_ _ old new]
              (when (not= old new)
-               (print "Connections changed: ")
-               (pprint new))))
+               (log/log "Connections changed:" (with-out-str (pprint new))))))
 
-(defn- broadcast-world-snapshot [snapshot]
-  (io!
-   (let [data  {:world snapshot}
-         conns (vals @ws->conn)]
-     (println "broadcasting to" (count conns) "conns")
-     (doseq [conn conns
-             :let [{:keys [ws player]} conn
-                   seqno   (:seqno @player)
-                   to-send (assoc data :seqno seqno)]]
-       (println "[" seqno "] sending to:" (str ws))
-       (ws/send! ws (pr-str to-send))))))
+(defn- send-on-websocket! [{ws :ws :as player} message]
+  (log/log "sending to:" (str ws) (:action message) (keys message))
+  (ws/send! ws (pr-str message))
+  ;; as this is an agent function we must return player, even if unchanged
+  player)
 
-(defn- on-player-agent-error [a ^Throwable ex]
-  (println ex)
+(defn- send-to-player! [player message]
+  ;; blocking, use send-off
+  (send-off player send-on-websocket! message))
+
+(defn- broadcast-message! [message]
+  (let [players (vals @ws->player)]
+    (log/log "broadcasting to" (count players) "players" (:action message) (keys message))
+    (doseq [player players]
+      (send-to-player! player message))))
+
+;; ============================================================================
+;; serializes the messages and performs dispatch/broadcast to connected players
+(def empty-message-log '())
+
+(defonce message-log (agent empty-message-log))
+
+(defn- newest-message [log]
+  (first log))
+
+(defn- add-message [log data]
+  ;; TODO: add timestamp and/or serial number?
+  (conj log data))
+
+(defn- log-message! [data]
+  (send message-log add-message data))
+
+(add-watch message-log :broadcast
+           (fn [_ _ _ log]
+             (when-some [message (newest-message log)]
+               (broadcast-message! message))))
+
+(defn reset-message-log! []
+  (send message-log (constantly empty-message-log)))
+
+;; ============================================================================
+
+(defn- on-player-agent-error [_ ^Throwable ex]
+  (log/log ex)
   #_(-> (if (instance? IllegalStateException ex)
-        (.getCause ex)
-        ex)
-      .getMessage
-      (or (str ex))
-      println))
+          (.getCause ex)
+          ex)
+        .getMessage
+        (or (str ex))
+        println))
 
-(defn- on-connect [ws]
-  (try
-    (let [wsk    (str ws)
-          _ (println "on-connect:" wsk)
-          pos    (dosync
-                  (world/add-object-at! (level/random-pos world/world)
-                                        (world/make-player)))
-          player (agent {:seqno 1
-                         :pos   pos}
-                        :error-handler #'on-player-agent-error)
-          conn   {:ws     ws
-                  :player player}]
-      (swap! ws->conn assoc wsk conn))
+(defn player-agent [ws]
+  (agent {:ws ws}
+         :error-handler #'on-player-agent-error))
 
-    ;; TODO: it should be more discrete
-    (broadcast-world-snapshot (world/make-snapshot))
-    (catch Exception ex
-      (println ex))))
-
-@ws->conn
-
-(defn- on-close [ws _ _]
-  (let [wsk  (str ws)
-        _ (println "on-close:" wsk)
-        conn (get @ws->conn wsk)]
-    (swap! ws->conn dissoc wsk)
-
-    (if-some [player (:player conn)]
-      (dosync
-       (world/del-object-at! (:pos @player)))
-      (println "No conn for ws:" wsk))
-
-    ;; TODO: it should be more discrete
-    (broadcast-world-snapshot (world/make-snapshot))))
-
-;; ======================================================================
-(defn message->action [_player message] (:action message))
+(defn message->action [_player message]
+  (:action message))
 
 (defmulti handle-action! #'message->action)
 
-(defmethod handle-action! :move [player {dir :dir}]
-  (println "move:" dir)
-  (let [res (dosync (-> player
-                        (update :pos #(movement/move-object-at! world/world % dir))
-                        (update :seqno inc)))]
-    ;; (println "tx done")
-    ;; TODO: it should be more discrete
-    (broadcast-world-snapshot (world/make-snapshot))
+(defmethod handle-action! :spawn [player message]
+  (log/log "spawn:" player)
+  (assoc player
+         :pos
+         (dosync
+          (let [pos  (level/random-pos world/world)
+                pos' (world/add-object-at! pos (world/make-player))]
+            (log-message! (assoc message
+                                 :pos    pos'
+                                 :object (world/get-object-at pos')))
+            pos'))))
 
-    res))
-;; ======================================================================
+(defmethod handle-action! :leave [player message]
+  (log/log "leave:" player)
+  (let [pos (:pos player)]
+    (dosync
+     (log-message! (assoc message :pos pos))
+     (world/del-object-at! pos)))
+  (dissoc player :pos))
 
-(defn- on-text [ws text-message]
+(defmethod handle-action! :move [player {dir :dir :as message}]
+  (log/log "move:" player dir)
+  (update player
+          :pos
+          #(dosync
+            (log-message! (assoc message :pos %))
+            (movement/move-object-at! world/world % dir))))
+
+(defn player-action! [player message]
+  (log/log "player-action!" player message)
+  (send player handle-action! message))
+
+;; ============================================================================
+
+(defn- on-connect [ws]
   (try
-    (let [wsk     (str ws)
-          ;; _ (println "on-text:" wsk)
-          conn    (get @ws->conn wsk)
-          player  (:player conn)
-          message (clojure.edn/read-string text-message)]
+    (let [wsk    (ws-key ws)
+          _      (log/log "on-connect:" wsk)
+          player (player-agent ws)]
+      (swap! ws->player assoc wsk player)
 
-      (send player handle-action! message))
+      ;; sending directly
+      (send-to-player! player
+                       {:action :snapshot
+                        :world  (world/make-snapshot)})
+
+      ;; TODO: ensure seamless integration of snapshot and the message log
+      (player-action! player {:action :spawn}))
+
     (catch Exception ex
-      (println ex))))
+      (log/log ex))))
+
+(defn- on-close [ws _ _]
+  (let [wsk    (ws-key ws)
+        _      (log/log "on-close:" wsk)
+        player (get @ws->player wsk)]
+    (swap! ws->player dissoc wsk)
+
+    (if (some? player)
+      (player-action! player {:action :leave})
+      (log/log "!!! No player found for:" wsk))))
+
+(defn- on-text [ws text]
+  (try
+    (let [wsk     (ws-key ws)
+          _       (log/log "on-text:" wsk)
+          player  (get @ws->player wsk)
+          message (clojure.edn/read-string text)]
+      ;; TODO: check that action is allowed
+      (player-action! player message))
+    (catch Exception ex
+      (log/log ex))))
 
 (defonce ws-handler
   {:on-connect #'on-connect
@@ -144,7 +197,8 @@
 
 (defn stop! []
   (stop-web-server!)
-  (world/destroy-world!))
+  (world/destroy-world!)
+  (reset-message-log!))
 
 (defn restart! []
   (stop!)
@@ -152,4 +206,5 @@
 
 (comment
   (restart!)
+  message-log
   )

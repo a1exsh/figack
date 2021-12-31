@@ -42,11 +42,18 @@
     (assoc pos :id id)))
 
 (defn del-object-at!
-  "Deletes object from the field at position (and object id) `pos`."
+  "Deletes the object from the field at position (and object id) `pos`."
   [pos]
   (-> world
       (level/get-field-at pos)
       (field/del-object! (:id pos))))
+
+(defn get-object-at
+  "Returns the object from the field at position (and object id) `pos`."
+  [pos]
+  (-> world
+      (level/get-field-at pos)
+      (field/get-object (:id pos))))
 
 (defn create-world! []
   (build-border-walls!)
